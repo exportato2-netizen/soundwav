@@ -9,8 +9,20 @@ VERSION='1.4'; FRAGMENTS=8
 _ORIG_CONVERT=None; _ORIG_RESET=None; _ORIG_SNAPSHOT=None; _ORIG_POST=None
 _START=threading.Lock()
 
-def clean_wav(p:Path)->bool:
-    try:return [x[0] for x in privacy._scan_riff_chunks(p)]==[b'fmt ',b'data']
+def wav_bits(p:Path)->int|None:
+    try:
+        chunks=privacy._scan_riff_chunks(p)
+        fmt=next((x for x in chunks if x[0]==b'fmt '),None)
+        if not fmt or fmt[2]<16:return None
+        with p.open('rb') as h:
+            h.seek(fmt[1]+14); raw=h.read(2)
+        return int.from_bytes(raw,'little') if len(raw)==2 else None
+    except Exception:return None
+
+def clean_wav(p:Path,bits:int|None=None)->bool:
+    try:
+        ok=[x[0] for x in privacy._scan_riff_chunks(p)]==[b'fmt ',b'data']
+        return ok and (bits is None or wav_bits(p)==bits)
     except Exception:return False
 
 def final_path(info:dict[str,Any])->Path:
@@ -24,11 +36,9 @@ def final_path(info:dict[str,Any])->Path:
 
 def choose_path(info:dict[str,Any],overwrite:bool)->Path:
     target=final_path(info); target.parent.mkdir(parents=True,exist_ok=True)
-    if overwrite or not target.exists() or not clean_wav(target): return target
-    for n in range(2,10000):
-        p=target.with_name(f'{target.stem} ({n}).wav')
-        if not p.exists(): return p
-    raise RuntimeError('No se pudo elegir un nombre de salida único')
+    # Si llegamos a convertir, el match_filter ya decidió que el archivo
+    # esperado falta, está sucio, tiene otra profundidad o se forzó descarga.
+    return target
 
 def purge_file_metadata(p:Path)->None:
     if hasattr(os,'listxattr') and hasattr(os,'removexattr'):
@@ -100,7 +110,7 @@ def run(url:str,bits:int,_keep:bool,force:bool,state_prepared:bool=False)->None:
         def mf(info:dict[str,Any],*,incomplete:bool):
             if force or incomplete:return None
             p=final_path(info)
-            if not (p.exists() and clean_wav(p)):return None
+            if not (p.exists() and clean_wav(p,bits)):return None
             key=str(info.get('id') or p)
             if key not in skipped:
                 skipped.add(key)
@@ -123,8 +133,8 @@ def run(url:str,bits:int,_keep:bool,force:bool,state_prepared:bool=False)->None:
                 if parts:app.STATE.log('Fuente seleccionada: '+' · '.join(parts))
                 with app.STATE.lock:app.STATE.status='converting'; app.STATE.message='Creando WAV limpio...'; app.STATE.current_title=title; app.STATE.percent=100
         opts={'format':'bestaudio/best','outtmpl':str(privacy.SESSION_TEMP_ROOT/'%(playlist_index|0)03d-%(id)s.%(ext)s'),'yesplaylist':True,'noplaylist':False,'ignoreerrors':True,'continuedl':True,'overwrites':bool(force),'windowsfilenames':True,'trim_file_name':120,'retries':10,'fragment_retries':10,'extractor_retries':5,'file_access_retries':5,'concurrent_fragment_downloads':FRAGMENTS,'sleep_interval_requests':0,'progress_hooks':[hook],'match_filter':mf,'logger':app.UILogger(),'quiet':False,'no_warnings':False,'noprogress':True,'writethumbnail':False,'writeinfojson':False,'writedescription':False,'writesubtitles':False,'writeautomaticsub':False,'xattrs':False,'updatetime':False,'cachedir':False,'postprocessors':[]}
-        if not force:opts['download_archive']=str(app.ARCHIVE_FILE)
         app.STATE.log(f'WAV PCM {bits} bits; hasta {FRAGMENTS} fragmentos simultáneos')
+        app.STATE.log('Chequeo por archivo real: solo se omite si el WAV esperado existe, está limpio y coincide en profundidad')
         with app.yt_dlp.YoutubeDL(opts) as ydl:
             ydl.add_post_processor(privacy.CleanWavPostProcessor(ydl,bits,overwrite=force),when='post_process'); result=ydl.download([url])
         with app.STATE.lock:
