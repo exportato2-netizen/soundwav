@@ -165,11 +165,12 @@ rem Metodo 2: instalador oficial de respaldo.
 where powershell >nul 2>&1
 if errorlevel 1 exit /b 1
 
-set "PY_ARCH=amd64"
-if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "PY_ARCH=arm64"
-if /I "%PROCESSOR_ARCHITEW6432%"=="ARM64" set "PY_ARCH=arm64"
+set "PY_SUFFIX=-amd64"
+if /I "%PROCESSOR_ARCHITECTURE%"=="x86" if not defined PROCESSOR_ARCHITEW6432 set "PY_SUFFIX="
+if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "PY_SUFFIX=-arm64"
+if /I "%PROCESSOR_ARCHITEW6432%"=="ARM64" set "PY_SUFFIX=-arm64"
 
-set "PY_FILE=python-%PY_VERSION%-%PY_ARCH%.exe"
+set "PY_FILE=python-%PY_VERSION%%PY_SUFFIX%.exe"
 set "PY_INSTALLER=%TEMP%\%PY_FILE%"
 set "PY_URL=https://www.python.org/ftp/python/%PY_VERSION%/%PY_FILE%"
 
