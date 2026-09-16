@@ -1,73 +1,119 @@
 # Soundwav
 
-Herramienta local para Windows que descarga playlists o pistas públicas de SoundCloud con `yt-dlp` y genera archivos WAV PCM limpios.
+**Descargador local para Windows que convierte pistas o playlists públicas de SoundCloud a WAV PCM limpio.**
 
-## Versión 1.3
+## ⬇ Descargar Soundwav
 
-`app.py` es la entrada segura. Carga el núcleo interno, activa obligatoriamente la limpieza del WAV y protege la API local antes de abrir la interfaz. Incluso `_core_app.py` actúa únicamente como cargador protegido: si se ejecuta directamente, redirige a la entrada segura.
+### [⬇ DESCARGAR SOUNDWAV PARA WINDOWS (ZIP)](https://github.com/exportato2-netizen/soundwav/archive/refs/heads/main.zip)
 
-Cada pista se procesa así:
+Después de descargar el ZIP: descomprímelo por completo y ejecuta **`launcher.bat`**.
 
-1. El archivo fuente se descarga a una carpeta temporal privada bajo `%LOCALAPPDATA%\soundwav\temp`.
-2. FFmpeg convierte el primer stream de audio a PCM 16 o 24 bits sin copiar metadatos ni capítulos.
-3. La aplicación reconstruye el contenedor RIFF y conserva únicamente los chunks `fmt ` y `data`.
-4. Solo después de verificar esa estructura, el WAV limpio se publica en `%USERPROFILE%\Music\WAV_Descargas`.
-5. El archivo fuente y los temporales se eliminan.
+---
 
-Si la carpeta Música está redirigida a otro disco, Soundwav copia primero el WAV limpio a un temporal del volumen de destino, vuelve a verificar sus chunks y después realiza el reemplazo final dentro de ese mismo volumen.
+## Versión 1.4
 
-El nombre final no contiene el ID del extractor. Ejemplo:
+La v1.4 refuerza el comportamiento de la aplicación en siete áreas: una sola ventana, cierre coordinado, detección de archivos ya existentes, visualización de progreso, mejor uso de ancho de banda, limpieza estricta del WAV y una descarga visible desde GitHub.
 
-```text
-001 - Nombre de la pista.wav
-```
+### Una sola ventana
 
-## Uso
+En Windows, Soundwav intenta abrirse como una **ventana de aplicación dedicada de Microsoft Edge o Google Chrome**, no como una pestaña normal.
 
-1. Descarga o clona este repositorio.
-2. Ejecuta `launcher.bat` en Windows 10 u 11.
-3. Si no hay Python 3.11 o superior, el lanzador intentará instalar Python automáticamente.
-4. Pega una URL pública de SoundCloud.
-5. Elige WAV PCM 24 o 16 bits y pulsa **Descargar**.
+- Si ejecutas `launcher.bat` mientras Soundwav ya está abierto, la segunda instancia termina y **no crea otra ventana**.
+- Si cierras la ventana de Soundwav, el servidor local también se apaga.
+- Si el proceso principal termina normalmente, la ventana dedicada también se cierra.
 
-## Privacidad de los WAV
+### No volver a descargar lo que ya existe
 
-La aplicación elimina del archivo final tags y chunks auxiliares como `LIST/INFO`, `BEXT`, `iXML`, carátulas, capítulos, comentarios, URL, artista/álbum heredados e identificadores del software de conversión. Para PCM generado por esta aplicación, el WAV final se verifica para que contenga solo `fmt ` y `data`.
-
-Esto no modifica el contenido audible de la fuente salvo la conversión necesaria a PCM. No intenta eliminar marcas acústicas o información que forme parte del propio audio.
-
-El historial de descargas y el registro de actividad son datos internos de la aplicación y se guardan fuera de la carpeta de música:
+Soundwav mantiene un historial interno en:
 
 ```text
 %LOCALAPPDATA%\soundwav
 ```
 
+Además del historial de `yt-dlp`, antes de una descarga comprueba el destino esperado. Si ya existe un WAV válido y verificado con solo los chunks RIFF `fmt ` y `data`, se omite esa pista salvo que actives **volver a descargar**.
+
+Esto permite cerrar y volver a abrir la aplicación sin volver a bajar las mismas pistas cuando la ruta de salida sigue siendo la misma.
+
+### Limpieza estricta del WAV
+
+Cada pista se procesa así:
+
+1. El archivo fuente se descarga a una carpeta temporal privada bajo `%LOCALAPPDATA%\soundwav\temp`.
+2. FFmpeg convierte el primer stream de audio a PCM 16 o 24 bits sin copiar metadatos ni capítulos.
+3. Soundwav reconstruye el contenedor RIFF y conserva exclusivamente los chunks `fmt ` y `data`.
+4. Se eliminan atributos extendidos del archivo cuando el sistema lo permite y, en Windows, se intenta eliminar también `Zone.Identifier`.
+5. Se vuelve a verificar la estructura final antes de publicar el WAV.
+6. Los temporales y el archivo fuente se eliminan.
+
+Por diseño, el WAV final no conserva `LIST/INFO`, `BEXT`, `iXML`, carátulas, capítulos, URL, comentarios, tags de artista/álbum heredados, licencia, copyright textual, IDs del extractor ni identificadores del software de conversión.
+
+El nombre final tampoco incluye el ID de SoundCloud. Ejemplo:
+
+```text
+001 - Nombre de la pista.wav
+```
+
+**Importante:** esto elimina metadatos y rastros técnicos del archivo. No cambia quién posee los derechos de una obra y no puede eliminar de forma garantizada una marca o identificación que esté incorporada en las propias muestras de audio sin modificar ese audio.
+
+### Progreso y velocidad
+
+La interfaz muestra valores formateados por Soundwav, sin reutilizar las cadenas de consola de `yt-dlp`:
+
+- porcentaje real calculado desde bytes descargados;
+- pistas completadas / total;
+- pistas ya existentes omitidas;
+- velocidad en KB/s, MB/s o GB/s;
+- tiempo restante en segundos/minutos/horas;
+- fuente de audio elegida por `yt-dlp` en el registro.
+
+### Mejor uso de la conexión
+
+Soundwav sigue pidiendo a `yt-dlp` la **mejor fuente de audio disponible** con `bestaudio/best`. El extractor de SoundCloud da prioridad al formato Original cuando SoundCloud lo ofrece y la sesión tiene acceso.
+
+Para streams HLS/DASH, la v1.4 usa hasta **8 fragmentos simultáneos** y no añade una pausa artificial entre solicitudes. Esto puede aumentar mucho la velocidad frente al valor por defecto de un solo fragmento. En una descarga HTTP directa, la velocidad máxima sigue dependiendo del servidor/CDN y de la conexión disponible.
+
+## Uso
+
+1. Descarga el ZIP desde el botón superior.
+2. Descomprime todos los archivos.
+3. Ejecuta `launcher.bat` en Windows 10 u 11.
+4. Si no hay Python 3.11 o superior, el lanzador intentará instalar Python automáticamente.
+5. Pega una URL pública de SoundCloud.
+6. Elige WAV PCM 24 o 16 bits y pulsa **Descargar**.
+
+Los WAV quedan por defecto en:
+
+```text
+%USERPROFILE%\Music\WAV_Descargas
+```
+
+Si la carpeta Música está redirigida a otro disco, Soundwav publica el WAV mediante una copia temporal verificada en el volumen de destino y después realiza el reemplazo final dentro de ese mismo volumen.
+
 ## Seguridad de la interfaz local
 
-El servidor escucha solo en `127.0.0.1`. Cada ejecución genera además un token aleatorio que la página debe enviar en todas las llamadas `/api/`, y se rechazan encabezados `Host` distintos de `127.0.0.1` o `localhost`. El token no se guarda en logs ni archivos persistentes.
+El servidor escucha solo en `127.0.0.1`. Cada ejecución genera un token aleatorio obligatorio para las llamadas `/api/` y se rechazan encabezados `Host` distintos de `127.0.0.1` o `localhost`.
 
 ## Actualizar componentes
 
-Ejecuta `ACTUALIZAR.bat`. El script siempre llama primero a `launcher.bat --setup-only`, por lo que también repara un entorno `.venv` existente que haya quedado dañado o ligado a un Python incompatible, y después actualiza las dependencias sin abrir la aplicación.
+Ejecuta `ACTUALIZAR.bat`. El script llama primero a `launcher.bat --setup-only`, de modo que puede reparar un `.venv` dañado o ligado a un Python incompatible antes de actualizar las dependencias.
 
 ## Requisitos
 
 - Windows 10 u 11.
-- Conexión a Internet durante la instalación inicial y las descargas.
-- Python 3.11 o superior; `launcher.bat` intenta instalar Python 3.14 automáticamente si hace falta.
+- Conexión a Internet.
+- Python 3.11 o superior; el lanzador intenta instalar Python 3.14 si hace falta.
 - El instalador de respaldo contempla Windows x86, x64 y ARM64.
 
 ## Archivos principales
 
-- `app.py`: entrada segura y guardas de ejecución.
+- `app.py`: entrada segura v1.4.
+- `v14_download.py`: progreso, chequeo de existentes, limpieza adicional y concurrencia de descarga.
+- `v14_window.py`: instancia única, ventana dedicada y cierre coordinado.
 - `privacy_patch.py`: conversión, aislamiento temporal y verificación RIFF.
-- `hardening.py`: protección de la API local mediante token y validación de `Host`.
-- `_core_app.py`: cargador interno protegido.
-- `_core_app.src`: código del núcleo cargado internamente; no es el punto de entrada de uso normal.
+- `hardening.py`: token local y validación de `Host`.
+- `_core_app.py` / `_core_app.src`: núcleo interno protegido.
 - `launcher.bat`: preparación automática y arranque.
-- `ACTUALIZAR.bat`: reparación del entorno y actualización manual de dependencias.
-- `requirements.txt`: dependencias de Python.
-- `LEEME_PRIMERO.txt`: instrucciones rápidas.
+- `ACTUALIZAR.bat`: reparación y actualización de dependencias.
 
 ## Uso responsable
 
