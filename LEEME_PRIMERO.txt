@@ -1,0 +1,88 @@
+SOUNDCLOUD PLAYLIST A WAV - VERSION MEJORADA
+=============================================
+
+OBJETIVO
+--------
+Descargar una playlist publica de SoundCloud usando la mejor fuente de audio
+que SoundCloud entregue y convertir cada pista a WAV PCM.
+
+USO
+---
+1. Descomprime completamente este ZIP.
+2. Haz doble clic en launcher.bat.
+3. Si no hay Python compatible, el lanzador intentara instalar Python 3.14
+   automaticamente con WinGet y usara el instalador oficial como respaldo.
+4. Se abrira una pagina local en tu navegador.
+5. Pega la URL de una playlist o pista de SoundCloud.
+6. Elige WAV PCM 24 o 16 bits y pulsa "Descargar playlist".
+
+Los archivos se guardan en:
+%USERPROFILE%\Music\SoundCloud_WAV
+
+El registro persistente queda en:
+%USERPROFILE%\Music\SoundCloud_WAV\actividad.log
+
+MEJORAS DE ESTA VERSION
+-----------------------
+- Python 3.11+ como minimo para evitar quedar cerca del fin de soporte de 3.10.
+- Instalacion automatica de Python 3.14 si hace falta.
+- El programa ya NO actualiza yt-dlp en cada inicio.
+- ACTUALIZAR.bat queda como actualizador manual de componentes.
+- Si el puerto 8765 esta ocupado, busca otro automaticamente.
+- Boton para copiar el registro y boton para cerrar la aplicacion.
+- Registro persistente en actividad.log.
+- Muestra en el registro el formato fuente seleccionado por yt-dlp.
+- Detecta y comunica mejor descargas con errores parciales.
+- La opcion de volver a descargar habilita sobreescritura real.
+- Comprueba el espacio libre antes de descargar.
+- Nombres de archivo algo mas cortos para reducir problemas con rutas de Windows.
+- Cabeceras de seguridad adicionales en la interfaz local.
+
+ACTUALIZAR COMPONENTES
+----------------------
+Ejecuta ACTUALIZAR.bat cuando quieras actualizar yt-dlp e ImageIO-FFmpeg.
+Esto es preferible a actualizar automaticamente en cada arranque porque evita
+que un cambio reciente rompa una instalacion que ya estaba funcionando.
+
+IMPORTANTE SOBRE LA CALIDAD
+---------------------------
+El programa pide a yt-dlp la mejor fuente de audio disponible. Cuando SoundCloud
+expone un archivo original y el acceso lo permite, yt-dlp le da prioridad.
+En otros casos la fuente puede ser AAC, Opus o MP3.
+
+Convertir una fuente comprimida a WAV evita una nueva compresion con perdida,
+pero NO recupera informacion que ya se perdio. WAV de 24 bits genera archivos
+mas grandes; no convierte por si solo una fuente comprimida en audio de mayor
+calidad real que el original recibido.
+
+REQUISITOS
+----------
+- Windows 10 u 11
+- Conexion a Internet durante la primera instalacion y las descargas
+- No necesitas instalar Python manualmente si la instalacion automatica funciona
+
+NO NECESITA
+-----------
+- Node.js para descargar de SoundCloud
+- npm
+- package.json
+- instalar FFmpeg manualmente
+
+FUNCIONES
+---------
+- Descarga playlists completas o pistas individuales de SoundCloud.
+- WAV PCM de 24 bits o 16 bits.
+- Carpeta por nombre de playlist.
+- Numeracion en el orden de la playlist.
+- Evita descargar dos veces lo ya completado.
+- Puede conservar el archivo fuente original.
+- Permite cancelar una descarga.
+- Permite forzar una nueva descarga.
+- Reintenta errores temporales.
+- Guarda un registro de actividad.
+
+USO RESPONSABLE
+---------------
+Utilizalo solo con contenido propio, con permiso del titular o cuando la
+legislacion aplicable permita la descarga. No evade cuentas privadas, DRM ni
+controles de acceso.
