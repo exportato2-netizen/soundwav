@@ -1,99 +1,53 @@
-SOUNDCLOUD PLAYLIST A WAV - VERSION 1.2
-=======================================
+SOUNDWAV - VERSION 1.3
+======================
 
-OBJETIVO
---------
-Descargar una playlist publica de SoundCloud usando la mejor fuente de audio
-que SoundCloud entregue y convertir cada pista a WAV PCM limpio.
-
-USO
----
-1. Descomprime completamente este ZIP.
+USO RAPIDO
+----------
+1. Descomprime todos los archivos en una carpeta.
 2. Haz doble clic en launcher.bat.
-3. Si no hay Python compatible, el lanzador intentara instalar Python 3.14
-   automaticamente con WinGet y usara el instalador oficial como respaldo.
-4. Se abrira una pagina local en tu navegador.
-5. Pega la URL de una playlist o pista de SoundCloud.
-6. Elige WAV PCM 24 o 16 bits y pulsa "Descargar playlist".
+3. Si falta Python compatible, el launcher intentara instalarlo automaticamente.
+4. Se abrira la interfaz en el navegador.
+5. Pega una URL publica de SoundCloud y pulsa Descargar.
 
-Los WAV finales se guardan en:
+SALIDA
+------
+Los WAV finales quedan en:
 %USERPROFILE%\Music\WAV_Descargas
 
-El historial y el registro interno quedan fuera de la carpeta de musica, en:
+El historial y registro interno quedan en:
 %LOCALAPPDATA%\soundwav
 
 LIMPIEZA DE METADATOS
 ---------------------
-La version 1.2 reescribe siempre el audio final y elimina los metadatos del
-archivo descargado antes de dejar el WAV definitivo.
+La version 1.3 obliga a que app.py cargue la capa de limpieza segura.
 
-Se elimina:
-- title, artist, album, comment, URL y otros tags heredados.
-- LIST/INFO, BEXT e iXML.
-- identificadores de software/encoder como Lavf.
-- caratulas y capitulos.
-- el ID de SoundCloud del nombre final del archivo.
-- el archivo fuente temporal descargado.
+El archivo fuente se descarga primero a una carpeta temporal interna. FFmpeg lo
+convierte a PCM y luego la aplicacion reconstruye el WAV final conservando solo:
+- fmt
+- data
 
-Ejemplo de nombre final:
+Por tanto, el WAV final no conserva tags heredados, LIST/INFO, BEXT, iXML,
+caratulas, capitulos, URL, comentarios, IDs del extractor ni identificadores del
+software de conversion.
+
+El nombre final tampoco incluye el ID de SoundCloud. Ejemplo:
 001 - Nombre de la pista.wav
 
-MEJORAS DE ESTA VERSION
------------------------
-- Python 3.11+ como minimo.
-- Instalacion automatica de Python 3.14 si hace falta.
-- El programa NO actualiza yt-dlp en cada inicio.
-- ACTUALIZAR.bat queda como actualizador manual de componentes.
-- Si el puerto 8765 esta ocupado, busca otro automaticamente.
-- Boton para copiar el registro y boton para cerrar la aplicacion.
-- Detecta y comunica mejor descargas con errores parciales.
-- La opcion de volver a descargar habilita sobreescritura real.
-- Comprueba el espacio libre antes de descargar.
-- Cabeceras de seguridad adicionales en la interfaz local.
-- Salida final sin metadatos ni IDs del extractor.
+IMPORTANTE
+----------
+La limpieza se refiere a metadatos y estructura del archivo. No puede quitar
+informacion que forme parte del propio audio audible sin modificar ese audio.
 
-ACTUALIZAR COMPONENTES
-----------------------
-Ejecuta ACTUALIZAR.bat cuando quieras actualizar yt-dlp e ImageIO-FFmpeg.
-Esto es preferible a actualizar automaticamente en cada arranque porque evita
-que un cambio reciente rompa una instalacion que ya estaba funcionando.
-
-IMPORTANTE SOBRE LA CALIDAD
----------------------------
-El programa pide a yt-dlp la mejor fuente de audio disponible. Cuando SoundCloud
-expone un archivo original y el acceso lo permite, yt-dlp le da prioridad.
-En otros casos la fuente puede ser AAC, Opus o MP3.
-
-Convertir una fuente comprimida a WAV evita una nueva compresion con perdida,
-pero NO recupera informacion que ya se perdio. WAV de 24 bits genera archivos
-mas grandes; no convierte por si solo una fuente comprimida en audio de mayor
-calidad real que el original recibido.
+ACTUALIZAR
+----------
+Ejecuta ACTUALIZAR.bat. Si todavia no existe el entorno .venv, el actualizador
+lo prepara automaticamente con launcher.bat --setup-only y luego continua.
 
 REQUISITOS
 ----------
 - Windows 10 u 11
-- Conexion a Internet durante la primera instalacion y las descargas
-- No necesitas instalar Python manualmente si la instalacion automatica funciona
-
-NO NECESITA
------------
-- Node.js para descargar de SoundCloud
-- npm
-- package.json
-- instalar FFmpeg manualmente
-
-FUNCIONES
----------
-- Descarga playlists completas o pistas individuales de SoundCloud.
-- WAV PCM de 24 bits o 16 bits.
-- Carpeta por nombre de playlist.
-- Numeracion en el orden de la playlist.
-- Evita descargar dos veces lo ya completado.
-- El archivo fuente temporal no se conserva.
-- Permite cancelar una descarga.
-- Permite forzar una nueva descarga.
-- Reintenta errores temporales.
-- Guarda un registro interno fuera de la carpeta de musica.
+- Conexion a Internet
+- Python 3.11 o superior; el launcher intenta instalar Python 3.14 si hace falta
 
 USO RESPONSABLE
 ---------------
