@@ -21,6 +21,7 @@ En Windows, Soundwav intenta abrirse como una **ventana de aplicación dedicada 
 - Si ejecutas `launcher.bat` mientras Soundwav ya está abierto, la segunda instancia termina y **no crea otra ventana**.
 - Si cierras la ventana de Soundwav, el servidor local también se apaga.
 - Si el proceso principal termina, Soundwav intenta cerrar también la ventana dedicada; en Windows la asocia además a un Job Object para reforzar el cierre incluso ante una terminación abrupta.
+- Recargar la interfaz tiene una ventana de gracia y no debería cancelar una descarga activa.
 
 ### No volver a descargar lo que ya existe
 
@@ -65,6 +66,8 @@ La interfaz muestra valores formateados por Soundwav, sin reutilizar las cadenas
 - velocidad en KB/s, MB/s o GB/s;
 - tiempo restante en segundos/minutos/horas;
 - fuente de audio elegida por `yt-dlp` en el registro.
+
+Los indicadores principales usan separadores y textos simples para reducir problemas de codificación en Windows.
 
 ### Mejor uso de la conexión
 
@@ -114,6 +117,10 @@ Ejecuta `ACTUALIZAR.bat`. El script llama primero a `launcher.bat --setup-only`,
 - `_core_app.py` / `_core_app.src`: núcleo interno protegido.
 - `launcher.bat`: preparación automática y arranque.
 - `ACTUALIZAR.bat`: reparación y actualización de dependencias.
+
+## Auditoría externa con Claude
+
+El repositorio incluye [`CLAUDE_AUDIT_PROMPT.md`](./CLAUDE_AUDIT_PROMPT.md), preparado para pedir a Claude una auditoría en dos pasadas de ventana única, cierre, metadatos, RIFF, duplicados, progreso, velocidad, seguridad local y casos límite de Windows.
 
 ## Uso responsable
 
