@@ -74,7 +74,7 @@ if "!NEW_VENV!"=="1" (
 
 echo.
 echo [4/4] Abriendo la aplicacion...
-".venv\Scripts\python.exe" app.py
+".venv\Scripts\python.exe" privacy_patch.py
 if errorlevel 1 goto :error
 exit /b 0
 
