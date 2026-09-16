@@ -2,13 +2,24 @@
 setlocal EnableExtensions
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
-title Actualizar componentes - SoundCloud a WAV
+title Actualizar componentes - Soundwav
+
+if not exist "launcher.bat" (
+    echo [ERROR] Falta launcher.bat en esta carpeta.
+    pause
+    exit /b 1
+)
+if not exist "requirements.txt" (
+    echo [ERROR] Falta requirements.txt en esta carpeta.
+    pause
+    exit /b 1
+)
 
 if not exist ".venv\Scripts\python.exe" (
-    echo No existe el entorno local. Ejecutando launcher.bat para prepararlo...
+    echo No existe el entorno local. Preparandolo primero...
     echo.
-    call launcher.bat
-    exit /b %errorlevel%
+    call launcher.bat --setup-only
+    if errorlevel 1 goto :error
 )
 
 echo Actualizando pip, yt-dlp e ImageIO-FFmpeg...
@@ -26,7 +37,8 @@ exit /b 0
 
 :error
 echo.
-echo [ERROR] No se pudo actualizar. Comprueba tu conexion a Internet.
+echo [ERROR] No se pudo preparar o actualizar la aplicacion.
+echo Comprueba tu conexion a Internet y vuelve a intentarlo.
 echo.
 pause
 exit /b 1
