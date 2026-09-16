@@ -12,10 +12,28 @@ Herramienta local para Windows que descarga playlists o pistas públicas de Soun
 - Opción para volver a descargar todo.
 - Reintentos ante errores temporales.
 - Cancelación de descargas desde la interfaz.
-- Registro persistente de actividad.
 - Interfaz web local en `127.0.0.1` con selección automática de puerto.
 - Instalación automática de Python compatible cuando sea necesaria.
 - No requiere instalar FFmpeg manualmente.
+
+## Salida limpia v1.2
+
+Los WAV finales se reescriben expresamente para eliminar metadatos y rastros del archivo fuente. La salida usa únicamente el primer stream de audio y elimina metadatos globales, capítulos, carátulas y chunks auxiliares de WAV.
+
+La limpieza incluye:
+
+- sin `title`, `artist`, `album`, `comment`, URL ni otros tags heredados;
+- sin `LIST/INFO`, `BEXT` ni `iXML`;
+- sin identificador de software/encoder `Lavf`;
+- sin ID de SoundCloud en el nombre del archivo;
+- el archivo fuente descargado no se conserva;
+- el historial y el registro interno se guardan fuera de la carpeta de música.
+
+Los nombres finales quedan, por ejemplo:
+
+```text
+001 - Nombre de la pista.wav
+```
 
 ## Uso rápido
 
@@ -25,16 +43,16 @@ Herramienta local para Windows que descarga playlists o pistas públicas de Soun
 4. Se abrirá la interfaz en el navegador.
 5. Pega una URL pública de SoundCloud y pulsa **Descargar playlist**.
 
-Los archivos se guardan por defecto en:
+Los WAV finales se guardan por defecto en:
 
 ```text
-%USERPROFILE%\Music\SoundCloud_WAV
+%USERPROFILE%\Music\WAV_Descargas
 ```
 
-El registro persistente se guarda en:
+El registro e historial internos se guardan fuera de esa carpeta, normalmente en:
 
 ```text
-%USERPROFILE%\Music\SoundCloud_WAV\actividad.log
+%LOCALAPPDATA%\soundwav
 ```
 
 ## Actualizar componentes
@@ -55,8 +73,9 @@ La aplicación solicita a `yt-dlp` el mejor audio disponible y convierte despué
 
 ## Archivos principales
 
-- `app.py`: aplicación e interfaz local.
-- `launcher.bat`: instalación/preparación automática y arranque.
+- `app.py`: aplicación e interfaz local base.
+- `privacy_patch.py`: capa v1.2 que fuerza WAV sin metadatos y nombres de salida limpios.
+- `launcher.bat`: instalación/preparación automática y arranque de la capa v1.2.
 - `ACTUALIZAR.bat`: actualización manual de dependencias.
 - `requirements.txt`: dependencias de Python.
 - `LEEME_PRIMERO.txt`: instrucciones rápidas para Windows.
