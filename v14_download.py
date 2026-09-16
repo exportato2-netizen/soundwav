@@ -24,7 +24,7 @@ def final_path(info:dict[str,Any])->Path:
 
 def choose_path(info:dict[str,Any],overwrite:bool)->Path:
     target=final_path(info); target.parent.mkdir(parents=True,exist_ok=True)
-    if overwrite or not target.exists(): return target
+    if overwrite or not target.exists() or not clean_wav(target): return target
     for n in range(2,10000):
         p=target.with_name(f'{target.stem} ({n}).wav')
         if not p.exists(): return p
@@ -160,6 +160,7 @@ def apply(app:Any)->None:
         try:
             d=self.read_json(); url=app.safe_text(d.get('url')); bits=int(d.get('bit_depth',24)); force=bool(d.get('force_redownload',False))
             if not app.soundcloud_url_is_allowed(url):return self.send_json({'error':'URL de SoundCloud no válida'},app.HTTPStatus.BAD_REQUEST)
+            if bits not in {16,24}:return self.send_json({'error':'Profundidad WAV no válida'},app.HTTPStatus.BAD_REQUEST)
             with _START:
                 if app.STATE.snapshot()['running']:return self.send_json({'error':'Ya hay una descarga en curso'},app.HTTPStatus.CONFLICT)
                 app.STATE.reset(); threading.Thread(target=run,args=(url,bits,False,force,True),daemon=True,name='soundwav-download').start()
