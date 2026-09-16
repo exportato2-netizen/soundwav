@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Capa de salida segura para Soundwav v1.3.
-
-El núcleo histórico queda aislado en _core_app.py. Esta capa fuerza que todo audio
-final pase por conversión PCM + reconstrucción RIFF conservando solo fmt y data.
-"""
+"""Capa de salida segura para Soundwav v1.3."""
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import secrets
@@ -38,16 +35,17 @@ STATE_ROOT = _state_root()
 SESSION_TEMP_ROOT = STATE_ROOT / "temp" / f"session-{os.getpid()}-{secrets.token_hex(4)}"
 
 
-def _clean_component(value: Any, fallback: str) -> str:
+def _clean_component(value: Any, fallback: str, max_length: int = 112) -> str:
     text = app.safe_text(value, fallback)
     text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text)
     text = re.sub(r"\s+", " ", text).strip(" .")
     if not text:
         text = fallback
     reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
-    if text.upper() in reserved:
+    device_name = text.split(".", 1)[0].upper()
+    if device_name in reserved:
         text = f"_{text}"
-    return text[:150]
+    return text[:max_length].rstrip(" .") or fallback
 
 
 def _remove_stale_temp_dirs(max_age_seconds: int = 172800) -> None:
@@ -65,8 +63,8 @@ def _remove_stale_temp_dirs(max_age_seconds: int = 172800) -> None:
 
 def _final_destination(info: dict[str, Any], overwrite: bool) -> Path:
     folder_source = info.get("playlist_title") or info.get("album") or info.get("uploader")
-    folder = _clean_component(folder_source, "Descargas")
-    title = _clean_component(info.get("title"), "Pista")
+    folder = _clean_component(folder_source, "Descargas", 64)
+    title = _clean_component(info.get("title"), "Pista", 112)
     index = info.get("playlist_index") or info.get("track_number")
     prefix = ""
     try:
@@ -155,6 +153,29 @@ def strip_wav_metadata(source: Path, destination: Path) -> None:
         raise RuntimeError("La verificación final de limpieza del WAV falló")
 
 
+def _publish_clean_file(clean_output: Path, destination: Path, token: str) -> None:
+    """Publica el WAV incluso si temp y Música están en volúmenes distintos."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.replace(clean_output, destination)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV and getattr(exc, "winerror", None) != 17:
+            raise
+
+    staging = destination.with_name(f".{destination.name}.{token}.tmp")
+    staging.unlink(missing_ok=True)
+    try:
+        shutil.copyfile(clean_output, staging)
+        copied_chunks = [chunk_id for chunk_id, _, _ in _scan_riff_chunks(staging)]
+        if copied_chunks != [b"fmt ", b"data"]:
+            raise RuntimeError("La copia al volumen de destino no superó la verificación WAV")
+        os.replace(staging, destination)
+        clean_output.unlink(missing_ok=True)
+    finally:
+        staging.unlink(missing_ok=True)
+
+
 def convert_to_wav_clean(
     source: Path,
     info: dict[str, Any],
@@ -227,8 +248,7 @@ def convert_to_wav_clean(
             )
 
         strip_wav_metadata(ffmpeg_output, clean_output)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(clean_output, destination)
+        _publish_clean_file(clean_output, destination, token)
         app.STATE.log(f"WAV limpio verificado: {destination.name}")
         return destination
     finally:
@@ -271,10 +291,25 @@ class CleanWavPostProcessor(app.PostProcessor):
         return ([str(source)] if source != destination else []), info
 
 
-def run_download_clean(url: str, bit_depth: int, _keep_original: bool, force_redownload: bool) -> None:
-    app.STATE.reset()
+def run_download_clean(
+    url: str,
+    bit_depth: int,
+    _keep_original: bool,
+    force_redownload: bool,
+    state_prepared: bool = False,
+) -> None:
+    if not state_prepared:
+        app.STATE.reset()
     app.DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     SESSION_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+
+    if app.STATE.cancel_requested:
+        with app.STATE.lock:
+            app.STATE.status = "cancelled"
+            app.STATE.message = "Descarga cancelada"
+            app.STATE.finished_at = time.time()
+        shutil.rmtree(SESSION_TEMP_ROOT, ignore_errors=True)
+        return
 
     def progress_hook(data: dict[str, Any]) -> None:
         if app.STATE.cancel_requested:
@@ -396,14 +431,52 @@ def run_download_clean(url: str, bit_depth: int, _keep_original: bool, force_red
         shutil.rmtree(SESSION_TEMP_ROOT, ignore_errors=True)
 
 
-def _patched_do_POST(self: Any) -> None:
-    if urlparse(self.path).path == "/api/start":
+def _handle_start(self: Any) -> None:
+    try:
+        data = self.read_json()
+        if not isinstance(data, dict):
+            raise ValueError("El cuerpo JSON debe ser un objeto")
+        url = app.safe_text(data.get("url"))
+        bit_depth = int(data.get("bit_depth", 24))
+        force_redownload = bool(data.get("force_redownload", False))
+
+        if not app.soundcloud_url_is_allowed(url):
+            self.send_json({"error": "La URL debe pertenecer a SoundCloud"}, app.HTTPStatus.BAD_REQUEST)
+            return
+        if bit_depth not in {16, 24}:
+            self.send_json({"error": "Profundidad WAV no válida"}, app.HTTPStatus.BAD_REQUEST)
+            return
+
         with _START_GATE:
-            _ORIGINAL_DO_POST(self)
-            for _ in range(100):
-                if app.STATE.snapshot()["running"]:
-                    break
-                time.sleep(0.005)
+            if app.STATE.snapshot()["running"]:
+                self.send_json({"error": "Ya hay una descarga en curso"}, app.HTTPStatus.CONFLICT)
+                return
+            app.STATE.reset()
+            thread = threading.Thread(
+                target=run_download_clean,
+                args=(url, bit_depth, False, force_redownload, True),
+                daemon=True,
+                name="soundwav-download",
+            )
+            try:
+                thread.start()
+            except Exception as exc:
+                with app.STATE.lock:
+                    app.STATE.status = "error"
+                    app.STATE.message = app.safe_text(exc, "No se pudo iniciar la descarga")
+                    app.STATE.finished_at = time.time()
+                self.send_json({"error": app.STATE.message}, app.HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
+
+        self.send_json({"ok": True}, app.HTTPStatus.ACCEPTED)
+    except (ValueError, UnicodeDecodeError) as exc:
+        self.send_json({"error": f"Solicitud inválida: {exc}"}, app.HTTPStatus.BAD_REQUEST)
+
+
+def _patched_do_POST(self: Any) -> None:
+    path = urlparse(self.path).path
+    if path == "/api/start":
+        _handle_start(self)
         return
     _ORIGINAL_DO_POST(self)
 
