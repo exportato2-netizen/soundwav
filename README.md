@@ -118,10 +118,6 @@ Ejecuta `ACTUALIZAR.bat`. El script llama primero a `launcher.bat --setup-only`,
 - `launcher.bat`: preparación automática y arranque.
 - `ACTUALIZAR.bat`: reparación y actualización de dependencias.
 
-## Auditoría externa con Claude
-
-El repositorio incluye [`CLAUDE_AUDIT_PROMPT.md`](./CLAUDE_AUDIT_PROMPT.md), preparado para pedir a Claude una auditoría en dos pasadas de ventana única, cierre, metadatos, RIFF, duplicados, progreso, velocidad, seguridad local y casos límite de Windows.
-
 ## Uso responsable
 
 Utiliza esta herramienta únicamente con contenido propio, con autorización del titular o cuando la legislación aplicable permita la descarga. No está diseñada para evadir DRM, cuentas privadas ni controles de acceso.
