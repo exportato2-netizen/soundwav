@@ -1,10 +1,10 @@
-SOUNDCLOUD PLAYLIST A WAV - VERSION MEJORADA
-=============================================
+SOUNDCLOUD PLAYLIST A WAV - VERSION 1.2
+=======================================
 
 OBJETIVO
 --------
 Descargar una playlist publica de SoundCloud usando la mejor fuente de audio
-que SoundCloud entregue y convertir cada pista a WAV PCM.
+que SoundCloud entregue y convertir cada pista a WAV PCM limpio.
 
 USO
 ---
@@ -16,27 +16,41 @@ USO
 5. Pega la URL de una playlist o pista de SoundCloud.
 6. Elige WAV PCM 24 o 16 bits y pulsa "Descargar playlist".
 
-Los archivos se guardan en:
-%USERPROFILE%\Music\SoundCloud_WAV
+Los WAV finales se guardan en:
+%USERPROFILE%\Music\WAV_Descargas
 
-El registro persistente queda en:
-%USERPROFILE%\Music\SoundCloud_WAV\actividad.log
+El historial y el registro interno quedan fuera de la carpeta de musica, en:
+%LOCALAPPDATA%\soundwav
+
+LIMPIEZA DE METADATOS
+---------------------
+La version 1.2 reescribe siempre el audio final y elimina los metadatos del
+archivo descargado antes de dejar el WAV definitivo.
+
+Se elimina:
+- title, artist, album, comment, URL y otros tags heredados.
+- LIST/INFO, BEXT e iXML.
+- identificadores de software/encoder como Lavf.
+- caratulas y capitulos.
+- el ID de SoundCloud del nombre final del archivo.
+- el archivo fuente temporal descargado.
+
+Ejemplo de nombre final:
+001 - Nombre de la pista.wav
 
 MEJORAS DE ESTA VERSION
 -----------------------
-- Python 3.11+ como minimo para evitar quedar cerca del fin de soporte de 3.10.
+- Python 3.11+ como minimo.
 - Instalacion automatica de Python 3.14 si hace falta.
-- El programa ya NO actualiza yt-dlp en cada inicio.
+- El programa NO actualiza yt-dlp en cada inicio.
 - ACTUALIZAR.bat queda como actualizador manual de componentes.
 - Si el puerto 8765 esta ocupado, busca otro automaticamente.
 - Boton para copiar el registro y boton para cerrar la aplicacion.
-- Registro persistente en actividad.log.
-- Muestra en el registro el formato fuente seleccionado por yt-dlp.
 - Detecta y comunica mejor descargas con errores parciales.
 - La opcion de volver a descargar habilita sobreescritura real.
 - Comprueba el espacio libre antes de descargar.
-- Nombres de archivo algo mas cortos para reducir problemas con rutas de Windows.
 - Cabeceras de seguridad adicionales en la interfaz local.
+- Salida final sin metadatos ni IDs del extractor.
 
 ACTUALIZAR COMPONENTES
 ----------------------
@@ -75,11 +89,11 @@ FUNCIONES
 - Carpeta por nombre de playlist.
 - Numeracion en el orden de la playlist.
 - Evita descargar dos veces lo ya completado.
-- Puede conservar el archivo fuente original.
+- El archivo fuente temporal no se conserva.
 - Permite cancelar una descarga.
 - Permite forzar una nueva descarga.
 - Reintenta errores temporales.
-- Guarda un registro de actividad.
+- Guarda un registro interno fuera de la carpeta de musica.
 
 USO RESPONSABLE
 ---------------
