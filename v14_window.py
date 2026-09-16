@@ -20,7 +20,7 @@ def acquire()->bool:
     privacy.STATE_ROOT.mkdir(parents=True,exist_ok=True)
     if os.name=='nt':
         k=ctypes.WinDLL('kernel32',use_last_error=True); k.CreateMutexW.argtypes=[ctypes.c_void_p,ctypes.c_bool,ctypes.c_wchar_p]; k.CreateMutexW.restype=ctypes.c_void_p
-        h=k.CreateMutexW(None,False,'Local\\Soundwav-v14-single-instance')
+        h=k.CreateMutexW(None,False,'Local\\Soundwav-single-instance')
         if not h:raise OSError(ctypes.get_last_error(),'No se pudo crear bloqueo de instancia')
         if ctypes.get_last_error()==183:k.CloseHandle(ctypes.c_void_p(h));return False
         _MUTEX=h;return True
@@ -90,6 +90,7 @@ def close_watch(server:Any)->None:
         time.sleep(.5)
         with _LOCK:t=_CLOSE_AT
         if t and time.monotonic()>=t:
+            if _APP is not None:cancel(_APP)
             try:server.shutdown()
             except Exception:pass
             return
@@ -104,7 +105,6 @@ def apply(app:Any)->None:
             with _LOCK:_CLOSE_AT=0.0
             return self.send_json({'ok':True})
         if path=='/api/ui-closed':
-            cancel(app)
             with _LOCK:_CLOSE_AT=time.monotonic()+3
             return self.send_json({'ok':True})
         return _ORIG_POST(self)
