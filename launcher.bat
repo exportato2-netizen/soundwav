@@ -2,14 +2,28 @@
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
-title SoundCloud Playlist a WAV
+title Soundwav
+
+set "SETUP_ONLY=0"
+if /I "%~1"=="--setup-only" set "SETUP_ONLY=1"
 
 cls
 echo.
 echo ============================================================
-echo   SoundCloud Playlist a WAV - Inicio automatico
+echo   Soundwav - Inicio automatico
 echo ============================================================
 echo.
+
+if not exist "app.py" (
+    echo [ERROR] Falta app.py en esta carpeta.
+    pause
+    exit /b 1
+)
+if not exist "requirements.txt" (
+    echo [ERROR] Falta requirements.txt en esta carpeta.
+    pause
+    exit /b 1
+)
 
 set "PY_CMD="
 set "PY_VERSION=3.14.7"
@@ -72,9 +86,15 @@ if "!NEW_VENV!"=="1" (
     )
 )
 
+if "!SETUP_ONLY!"=="1" (
+    echo.
+    echo Preparacion completada.
+    exit /b 0
+)
+
 echo.
 echo [4/4] Abriendo la aplicacion...
-".venv\Scripts\python.exe" privacy_patch.py
+".venv\Scripts\python.exe" app.py
 if errorlevel 1 goto :error
 exit /b 0
 
@@ -130,7 +150,7 @@ for %%P in (
 exit /b 1
 
 :install_python
-rem Metodo 1: WinGet. El paquete de rama 3.14 instala el ultimo parche disponible.
+rem Metodo 1: WinGet. Instala la rama 3.14 actual disponible.
 where winget >nul 2>&1
 if not errorlevel 1 (
     echo Intentando instalar Python 3.14 con WinGet...
