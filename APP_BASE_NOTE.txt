@@ -1,0 +1,1 @@
+Internal compatibility note: app_base.py contains the original application implementation used by the v1.2 privacy wrapper.
