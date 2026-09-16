@@ -20,19 +20,19 @@ En Windows, Soundwav intenta abrirse como una **ventana de aplicación dedicada 
 
 - Si ejecutas `launcher.bat` mientras Soundwav ya está abierto, la segunda instancia termina y **no crea otra ventana**.
 - Si cierras la ventana de Soundwav, el servidor local también se apaga.
-- Si el proceso principal termina normalmente, la ventana dedicada también se cierra.
+- Si el proceso principal termina, Soundwav intenta cerrar también la ventana dedicada; en Windows la asocia además a un Job Object para reforzar el cierre incluso ante una terminación abrupta.
 
 ### No volver a descargar lo que ya existe
 
-Soundwav mantiene un historial interno en:
+La **ruta de salida real** es la fuente de verdad. Antes de descargar cada pista, Soundwav calcula el destino esperado y comprueba el archivo físico. Solo la omite cuando el WAV ya existe, contiene exclusivamente los chunks RIFF `fmt ` y `data` y además coincide con la profundidad seleccionada (16 o 24 bits).
+
+Si el archivo fue borrado, está incompleto/sucio o tiene otra profundidad, se descarga y se reemplaza. Esto evita que un historial antiguo haga saltarse un archivo que ya no existe y permite cerrar/reabrir la aplicación sin volver a bajar lo que realmente ya está correcto en la misma ruta.
+
+El registro y demás estado interno siguen guardándose fuera de la carpeta de música en:
 
 ```text
 %LOCALAPPDATA%\soundwav
 ```
-
-Además del historial de `yt-dlp`, antes de una descarga comprueba el destino esperado. Si ya existe un WAV válido y verificado con solo los chunks RIFF `fmt ` y `data`, se omite esa pista salvo que actives **volver a descargar**.
-
-Esto permite cerrar y volver a abrir la aplicación sin volver a bajar las mismas pistas cuando la ruta de salida sigue siendo la misma.
 
 ### Limpieza estricta del WAV
 
