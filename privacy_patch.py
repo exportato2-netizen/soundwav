@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
-"""Arranque reforzado: WAV final sin metadatos ni rastros de origen en nombre/ruta."""
+"""Capa de salida segura para Soundwav v1.3.
+
+El núcleo histórico queda aislado en _core_app.py. Esta capa fuerza que todo audio
+final pase por conversión PCM + reconstrucción RIFF conservando solo fmt y data.
+"""
 
 from __future__ import annotations
 
 import os
 import re
+import secrets
+import shutil
+import struct
 import subprocess
+import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
+from urllib.parse import urlparse
 
-import app
+import _core_app as app
 
-VERSION = "1.2"
+VERSION = "1.3"
+_START_GATE = threading.Lock()
+_ORIGINAL_DO_POST = app.RequestHandler.do_POST
 
 
 def _state_root() -> Path:
@@ -21,6 +32,10 @@ def _state_root() -> Path:
     else:
         base = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state"))
     return base / "soundwav"
+
+
+STATE_ROOT = _state_root()
+SESSION_TEMP_ROOT = STATE_ROOT / "temp" / f"session-{os.getpid()}-{secrets.token_hex(4)}"
 
 
 def _clean_component(value: Any, fallback: str) -> str:
@@ -35,11 +50,23 @@ def _clean_component(value: Any, fallback: str) -> str:
     return text[:150]
 
 
-def _clean_destination(source: Path, info: dict[str, Any]) -> Path:
+def _remove_stale_temp_dirs(max_age_seconds: int = 172800) -> None:
+    root = STATE_ROOT / "temp"
+    if not root.exists():
+        return
+    cutoff = time.time() - max_age_seconds
+    for path in root.glob("session-*"):
+        try:
+            if path.is_dir() and path.stat().st_mtime < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def _final_destination(info: dict[str, Any], overwrite: bool) -> Path:
     folder_source = info.get("playlist_title") or info.get("album") or info.get("uploader")
     folder = _clean_component(folder_source, "Descargas")
     title = _clean_component(info.get("title"), "Pista")
-
     index = info.get("playlist_index") or info.get("track_number")
     prefix = ""
     try:
@@ -50,31 +77,113 @@ def _clean_destination(source: Path, info: dict[str, Any]) -> Path:
 
     target_dir = app.DOWNLOAD_ROOT / folder
     target_dir.mkdir(parents=True, exist_ok=True)
-    return target_dir / f"{prefix}{title}.wav"
+    target = target_dir / f"{prefix}{title}.wav"
+    if overwrite or not target.exists():
+        return target
+
+    stem = target.stem
+    for number in range(2, 10000):
+        candidate = target.with_name(f"{stem} ({number}).wav")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError("No se pudo elegir un nombre de salida único")
 
 
-def convert_to_wav_clean(source: Path, info: dict[str, Any], bit_depth: int, _keep_original: bool = False) -> Path:
-    """Reescribe siempre el audio y deja el WAV sin tags/chunks de metadatos."""
+def _scan_riff_chunks(path: Path) -> list[tuple[bytes, int, int]]:
+    chunks: list[tuple[bytes, int, int]] = []
+    file_size = path.stat().st_size
+    with path.open("rb") as handle:
+        header = handle.read(12)
+        if len(header) != 12 or header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+            raise RuntimeError("El WAV temporal no tiene una cabecera RIFF/WAVE válida")
+        offset = 12
+        while offset + 8 <= file_size:
+            handle.seek(offset)
+            chunk_header = handle.read(8)
+            if len(chunk_header) != 8:
+                break
+            chunk_id = chunk_header[:4]
+            chunk_size = struct.unpack("<I", chunk_header[4:8])[0]
+            data_offset = offset + 8
+            end_offset = data_offset + chunk_size
+            if end_offset > file_size:
+                raise RuntimeError("El WAV temporal contiene un chunk truncado")
+            chunks.append((chunk_id, data_offset, chunk_size))
+            offset = end_offset + (chunk_size & 1)
+    return chunks
+
+
+def _copy_exact(source: BinaryIO, destination: BinaryIO, count: int) -> None:
+    remaining = count
+    while remaining:
+        block = source.read(min(1024 * 1024, remaining))
+        if not block:
+            raise RuntimeError("El WAV temporal terminó inesperadamente")
+        destination.write(block)
+        remaining -= len(block)
+
+
+def strip_wav_metadata(source: Path, destination: Path) -> None:
+    """Reconstruye un WAV PCM conservando únicamente fmt y data."""
+    chunks = _scan_riff_chunks(source)
+    fmt_chunks = [chunk for chunk in chunks if chunk[0] == b"fmt "]
+    data_chunks = [chunk for chunk in chunks if chunk[0] == b"data"]
+    if len(fmt_chunks) != 1 or len(data_chunks) != 1:
+        raise RuntimeError("El WAV temporal no contiene exactamente un chunk fmt y un chunk data")
+
+    selected = [fmt_chunks[0], data_chunks[0]]
+    riff_payload_size = 4 + sum(8 + size + (size & 1) for _, _, size in selected)
+    if riff_payload_size > 0xFFFFFFFF:
+        raise RuntimeError("El WAV supera el límite RIFF de 4 GiB")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with source.open("rb") as src, destination.open("wb") as dst:
+        dst.write(b"RIFF")
+        dst.write(struct.pack("<I", riff_payload_size))
+        dst.write(b"WAVE")
+        for chunk_id, data_offset, chunk_size in selected:
+            dst.write(chunk_id)
+            dst.write(struct.pack("<I", chunk_size))
+            src.seek(data_offset)
+            _copy_exact(src, dst, chunk_size)
+            if chunk_size & 1:
+                dst.write(b"\x00")
+
+    final_chunks = [chunk_id for chunk_id, _, _ in _scan_riff_chunks(destination)]
+    if final_chunks != [b"fmt ", b"data"]:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError("La verificación final de limpieza del WAV falló")
+
+
+def convert_to_wav_clean(
+    source: Path,
+    info: dict[str, Any],
+    bit_depth: int,
+    _keep_original: bool = False,
+    *,
+    overwrite: bool = False,
+) -> Path:
     if app.STATE.cancel_requested:
         raise RuntimeError("Descarga cancelada")
+    if not source.exists():
+        raise RuntimeError(f"No se encontró el audio descargado: {source.name}")
 
-    destination = _clean_destination(source, info)
-    temp_output = destination.with_name(f".{destination.stem}.tmp.wav")
-    temp_output.unlink(missing_ok=True)
-
+    SESSION_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+    destination = _final_destination(info, overwrite)
+    token = secrets.token_hex(8)
+    ffmpeg_output = SESSION_TEMP_ROOT / f"ffmpeg-{token}.wav"
+    clean_output = SESSION_TEMP_ROOT / f"clean-{token}.wav"
     codec = "pcm_s24le" if bit_depth == 24 else "pcm_s16le"
     ffmpeg_exe = app.imageio_ffmpeg.get_ffmpeg_exe()
 
     with app.STATE.lock:
         app.STATE.status = "converting"
-        app.STATE.message = f"Convirtiendo y eliminando metadatos ({bit_depth} bits)..."
+        app.STATE.message = f"Convirtiendo y limpiando WAV ({bit_depth} bits)..."
         app.STATE.current_title = app.safe_text(info.get("title"), source.stem)
 
     command = [
         ffmpeg_exe,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-y",
+        "-hide_banner", "-loglevel", "error", "-y",
         "-i", str(source),
         "-map", "0:a:0",
         "-vn",
@@ -85,7 +194,7 @@ def convert_to_wav_clean(source: Path, info: dict[str, Any], bit_depth: int, _ke
         "-c:a", codec,
         "-write_bext", "0",
         "-write_peak", "off",
-        str(temp_output),
+        str(ffmpeg_output),
     ]
 
     process = subprocess.Popen(
@@ -100,38 +209,40 @@ def convert_to_wav_clean(source: Path, info: dict[str, Any], bit_depth: int, _ke
     with app.STATE.lock:
         app.STATE.ffmpeg_process = process
 
-    while process.poll() is None:
-        if app.STATE.cancel_requested:
-            process.terminate()
-            try:
-                process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
-            temp_output.unlink(missing_ok=True)
-            raise RuntimeError("Descarga cancelada")
-        time.sleep(0.2)
+    try:
+        while process.poll() is None:
+            if app.STATE.cancel_requested:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                raise RuntimeError("Descarga cancelada")
+            time.sleep(0.2)
 
-    _, stderr = process.communicate()
-    with app.STATE.lock:
-        app.STATE.ffmpeg_process = None
+        _, stderr = process.communicate()
+        if process.returncode != 0 or not ffmpeg_output.exists():
+            raise RuntimeError(
+                f"FFmpeg no pudo convertir {source.name}: {app.safe_text(stderr, 'error desconocido')}"
+            )
 
-    if process.returncode != 0 or not temp_output.exists():
-        temp_output.unlink(missing_ok=True)
-        raise RuntimeError(
-            f"FFmpeg no pudo convertir {source.name}: {app.safe_text(stderr, 'error desconocido')}"
-        )
-
-    temp_output.replace(destination)
-    app.STATE.log(f"WAV limpio terminado: {destination.name}")
-    return destination
+        strip_wav_metadata(ffmpeg_output, clean_output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(clean_output, destination)
+        app.STATE.log(f"WAV limpio verificado: {destination.name}")
+        return destination
+    finally:
+        with app.STATE.lock:
+            app.STATE.ffmpeg_process = None
+        ffmpeg_output.unlink(missing_ok=True)
+        clean_output.unlink(missing_ok=True)
 
 
 class CleanWavPostProcessor(app.PostProcessor):
-    """Postprocesador que conserva únicamente el WAV limpio final."""
-
-    def __init__(self, downloader: Any, bit_depth: int, _keep_original: bool = False) -> None:
+    def __init__(self, downloader: Any, bit_depth: int, _keep_original: bool = False, overwrite: bool = False) -> None:
         super().__init__(downloader)
         self.bit_depth = bit_depth
+        self.overwrite = overwrite
 
     def run(self, info: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         source_name = app.safe_text(info.get("filepath") or info.get("_filename"))
@@ -140,21 +251,13 @@ class CleanWavPostProcessor(app.PostProcessor):
         source = Path(source_name)
 
         try:
-            destination = convert_to_wav_clean(source, info, self.bit_depth)
+            destination = convert_to_wav_clean(source, info, self.bit_depth, overwrite=self.overwrite)
         except Exception as exc:
             if app.STATE.cancel_requested:
                 raise app.yt_dlp.utils.DownloadCancelled("Cancelado por el usuario") from exc
             with app.STATE.lock:
                 app.STATE.failed += 1
             raise app.yt_dlp.utils.PostProcessingError(str(exc)) from exc
-
-        if source != destination:
-            source.unlink(missing_ok=True)
-            if source.parent != destination.parent:
-                try:
-                    source.parent.rmdir()
-                except OSError:
-                    pass
 
         with app.STATE.lock:
             app.STATE.completed += 1
@@ -165,34 +268,177 @@ class CleanWavPostProcessor(app.PostProcessor):
         info["filepath"] = str(destination)
         info["_filename"] = str(destination)
         info["ext"] = "wav"
-        return [], info
+        return ([str(source)] if source != destination else []), info
+
+
+def run_download_clean(url: str, bit_depth: int, _keep_original: bool, force_redownload: bool) -> None:
+    app.STATE.reset()
+    app.DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    SESSION_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+
+    def progress_hook(data: dict[str, Any]) -> None:
+        if app.STATE.cancel_requested:
+            raise app.yt_dlp.utils.DownloadCancelled("Cancelado por el usuario")
+        status = data.get("status")
+        info = data.get("info_dict") or {}
+        title = app.safe_text(info.get("title"), "Procesando pista")
+        if status == "downloading":
+            with app.STATE.lock:
+                app.STATE.status = "downloading"
+                app.STATE.message = "Descargando el mejor audio disponible..."
+                app.STATE.current_title = title
+                app.STATE.percent = app.parse_percent(data.get("_percent_str"))
+                app.STATE.speed = app.safe_text(data.get("_speed_str"))
+                app.STATE.eta = app.safe_text(data.get("_eta_str"))
+                playlist_count = info.get("playlist_count") or info.get("n_entries")
+                if isinstance(playlist_count, int):
+                    app.STATE.total = playlist_count
+        elif status == "finished":
+            with app.STATE.lock:
+                app.STATE.status = "converting"
+                app.STATE.message = "Audio descargado; preparando WAV limpio..."
+                app.STATE.current_title = title
+                app.STATE.percent = 100.0
+
+    output_template = str(SESSION_TEMP_ROOT / "%(playlist_index|0)03d-%(id)s.%(ext)s")
+    options: dict[str, Any] = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "yesplaylist": True,
+        "noplaylist": False,
+        "ignoreerrors": True,
+        "continuedl": True,
+        "overwrites": bool(force_redownload),
+        "windowsfilenames": True,
+        "trim_file_name": 120,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 5,
+        "file_access_retries": 5,
+        "sleep_interval_requests": 0.75,
+        "concurrent_fragment_downloads": 1,
+        "progress_hooks": [progress_hook],
+        "logger": app.UILogger(),
+        "quiet": False,
+        "no_warnings": False,
+        "noprogress": True,
+        "restrictfilenames": False,
+        "writethumbnail": False,
+        "writeinfojson": False,
+        "writedescription": False,
+        "writesubtitles": False,
+        "writeautomaticsub": False,
+        "cachedir": False,
+        "postprocessors": [],
+    }
+    if not force_redownload:
+        options["download_archive"] = str(app.ARCHIVE_FILE)
+
+    app.STATE.log(f"Carpeta de salida: {app.DOWNLOAD_ROOT}")
+    app.STATE.log(f"Formato final: WAV PCM {bit_depth} bits, verificado sin chunks de metadatos")
+    try:
+        free_gb = shutil.disk_usage(app.DOWNLOAD_ROOT).free / (1024 ** 3)
+        app.STATE.log(f"Espacio libre: {free_gb:.1f} GB")
+    except OSError:
+        pass
+
+    try:
+        with app.yt_dlp.YoutubeDL(options) as downloader:
+            downloader.add_post_processor(
+                CleanWavPostProcessor(downloader, bit_depth, overwrite=force_redownload),
+                when="post_process",
+            )
+            result = downloader.download([url])
+
+        if app.STATE.cancel_requested:
+            with app.STATE.lock:
+                app.STATE.status = "cancelled"
+                app.STATE.message = "Descarga cancelada"
+        elif (result not in (0, None) or app.STATE.had_download_errors) and app.STATE.completed == 0:
+            with app.STATE.lock:
+                app.STATE.status = "error"
+                app.STATE.message = "No se pudo completar ninguna pista; revisa el registro"
+            app.STATE.log(app.STATE.message)
+        else:
+            with app.STATE.lock:
+                app.STATE.status = "completed"
+                app.STATE.percent = 100.0
+                if app.STATE.failed:
+                    app.STATE.message = f"Finalizado: {app.STATE.completed} pistas, {app.STATE.failed} con error"
+                elif app.STATE.had_download_errors or result not in (0, None):
+                    app.STATE.message = f"Finalizado: {app.STATE.completed} pistas; hubo errores en algunas descargas"
+                elif app.STATE.completed:
+                    app.STATE.message = f"Playlist terminada: {app.STATE.completed} pistas WAV"
+                else:
+                    app.STATE.message = "No había pistas nuevas para descargar"
+            app.STATE.log(app.STATE.message)
+
+    except app.yt_dlp.utils.DownloadCancelled:
+        with app.STATE.lock:
+            app.STATE.status = "cancelled"
+            app.STATE.message = "Descarga cancelada"
+        app.STATE.log("Descarga cancelada por el usuario")
+    except Exception as exc:
+        if app.STATE.cancel_requested:
+            with app.STATE.lock:
+                app.STATE.status = "cancelled"
+                app.STATE.message = "Descarga cancelada"
+        else:
+            with app.STATE.lock:
+                app.STATE.status = "error"
+                app.STATE.message = app.safe_text(exc, "Error inesperado")
+            app.STATE.log(f"Error inesperado: {exc}")
+            app.STATE.log(app.traceback.format_exc())
+    finally:
+        with app.STATE.lock:
+            app.STATE.finished_at = time.time()
+            app.STATE.ffmpeg_process = None
+        shutil.rmtree(SESSION_TEMP_ROOT, ignore_errors=True)
+
+
+def _patched_do_POST(self: Any) -> None:
+    if urlparse(self.path).path == "/api/start":
+        with _START_GATE:
+            _ORIGINAL_DO_POST(self)
+            for _ in range(100):
+                if app.STATE.snapshot()["running"]:
+                    break
+                time.sleep(0.005)
+        return
+    _ORIGINAL_DO_POST(self)
+
+
+def _patch_html(html: str) -> str:
+    html = re.sub(
+        r'<label class="check"><input id="keep" type="checkbox">.*?</label>\s*',
+        "",
+        html,
+        count=1,
+    )
+    html = html.replace("keep_original:$('keep').checked,", "")
+    html = html.replace(";$('keep').disabled=running", "")
+    html = html.replace(
+        "El registro completo también queda guardado en la carpeta de descargas.",
+        "Cada WAV final se verifica con solo los chunks RIFF fmt y data. Los temporales quedan fuera de la carpeta de música.",
+    )
+    return html
 
 
 def apply_patch() -> None:
+    app.APP_NAME = "Soundwav"
     app.APP_VERSION = VERSION
     app.DOWNLOAD_ROOT = Path.home() / "Music" / "WAV_Descargas"
-    state_root = _state_root()
-    state_root.mkdir(parents=True, exist_ok=True)
-    app.ARCHIVE_FILE = state_root / "descargados.txt"
-    app.LOG_FILE = state_root / "actividad.log"
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    _remove_stale_temp_dirs()
+    app.ARCHIVE_FILE = STATE_ROOT / "descargados.txt"
+    app.LOG_FILE = STATE_ROOT / "actividad.log"
 
     app.convert_to_wav = convert_to_wav_clean
     app.WavPostProcessor = CleanWavPostProcessor
+    app.run_download = run_download_clean
     app.RequestHandler.server_version = f"soundwav/{VERSION}"
-
-    app.HTML = app.HTML.replace(
-        '<label class="check"><input id="keep" type="checkbox">Conservar también el archivo fuente descargado</label>\n',
-        "",
-    )
-    app.HTML = app.HTML.replace(
-        "keep_original:$('keep').checked,",
-        "",
-    )
-    app.HTML = app.HTML.replace(";$('keep').disabled=running", "")
-    app.HTML = app.HTML.replace(
-        "El registro completo también queda guardado en la carpeta de descargas.",
-        "Los WAV finales se guardan sin metadatos. El registro interno queda fuera de la carpeta de música.",
-    )
+    app.RequestHandler.do_POST = _patched_do_POST
+    app.HTML = _patch_html(app.HTML)
 
 
 if __name__ == "__main__":
