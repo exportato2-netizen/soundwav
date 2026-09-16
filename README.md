@@ -1,55 +1,40 @@
-# SoundCloud → WAV
+# Soundwav
 
-Herramienta local para Windows que descarga playlists o pistas públicas de SoundCloud usando `yt-dlp` y convierte cada pista a WAV PCM mediante FFmpeg incluido por `imageio-ffmpeg`.
+Herramienta local para Windows que descarga playlists o pistas públicas de SoundCloud con `yt-dlp` y genera archivos WAV PCM limpios.
 
-## Características
+## Versión 1.3
 
-- Descarga playlists completas o pistas individuales.
-- Selecciona el mejor audio disponible que SoundCloud entregue a `yt-dlp`.
-- Conversión a WAV PCM de 24 o 16 bits.
-- Mantiene el orden de la playlist y crea carpetas por playlist.
-- Historial para evitar descargar dos veces lo ya completado.
-- Opción para volver a descargar todo.
-- Reintentos ante errores temporales.
-- Cancelación de descargas desde la interfaz.
-- Interfaz web local en `127.0.0.1` con selección automática de puerto.
-- Instalación automática de Python compatible cuando sea necesaria.
-- No requiere instalar FFmpeg manualmente.
+La salida final ya no depende de ejecutar manualmente un parche externo. `app.py` es ahora la entrada segura y carga el núcleo interno con la capa de limpieza obligatoria.
 
-## Salida limpia v1.2
+Cada pista se procesa así:
 
-Los WAV finales se reescriben expresamente para eliminar metadatos y rastros del archivo fuente. La salida usa únicamente el primer stream de audio y elimina metadatos globales, capítulos, carátulas y chunks auxiliares de WAV.
+1. El archivo fuente se descarga a una carpeta temporal privada bajo `%LOCALAPPDATA%\soundwav\temp`.
+2. FFmpeg convierte el primer stream de audio a PCM 16 o 24 bits sin copiar metadatos ni capítulos.
+3. La aplicación reconstruye el contenedor RIFF y conserva únicamente los chunks `fmt ` y `data`.
+4. Solo después de verificar esa estructura, el WAV limpio se mueve a `%USERPROFILE%\Music\WAV_Descargas`.
+5. El archivo fuente y los temporales se eliminan.
 
-La limpieza incluye:
-
-- sin `title`, `artist`, `album`, `comment`, URL ni otros tags heredados;
-- sin `LIST/INFO`, `BEXT` ni `iXML`;
-- sin identificador de software/encoder `Lavf`;
-- sin ID de SoundCloud en el nombre del archivo;
-- el archivo fuente descargado no se conserva;
-- el historial y el registro interno se guardan fuera de la carpeta de música.
-
-Los nombres finales quedan, por ejemplo:
+El nombre final no contiene el ID del extractor. Ejemplo:
 
 ```text
 001 - Nombre de la pista.wav
 ```
 
-## Uso rápido
+## Uso
 
 1. Descarga o clona este repositorio.
-2. En Windows 10 u 11, ejecuta `launcher.bat`.
-3. El lanzador comprobará Python y preparará automáticamente el entorno local `.venv`.
-4. Se abrirá la interfaz en el navegador.
-5. Pega una URL pública de SoundCloud y pulsa **Descargar playlist**.
+2. Ejecuta `launcher.bat` en Windows 10 u 11.
+3. Si no hay Python 3.11 o superior, el lanzador intentará instalar Python automáticamente.
+4. Pega una URL pública de SoundCloud.
+5. Elige WAV PCM 24 o 16 bits y pulsa **Descargar**.
 
-Los WAV finales se guardan por defecto en:
+## Privacidad de los WAV
 
-```text
-%USERPROFILE%\Music\WAV_Descargas
-```
+La aplicación elimina del archivo final tags y chunks auxiliares como `LIST/INFO`, `BEXT`, `iXML`, carátulas, capítulos, comentarios, URL, artista/álbum heredados e identificadores del software de conversión. Para PCM generado por esta aplicación, el WAV final se verifica para que contenga solo `fmt ` y `data`.
 
-El registro e historial internos se guardan fuera de esa carpeta, normalmente en:
+Esto no modifica el contenido audible de la fuente salvo la conversión necesaria a PCM. No intenta eliminar marcas acústicas o información que forme parte del propio audio.
+
+El historial de descargas y el registro de actividad son datos internos de la aplicación y se guardan fuera de la carpeta de música:
 
 ```text
 %LOCALAPPDATA%\soundwav
@@ -57,29 +42,24 @@ El registro e historial internos se guardan fuera de esa carpeta, normalmente en
 
 ## Actualizar componentes
 
-Ejecuta `ACTUALIZAR.bat`. Las dependencias no se actualizan en cada inicio normal para reducir tiempos de arranque y evitar introducir una versión recién publicada inesperadamente.
+Ejecuta `ACTUALIZAR.bat`. Si el entorno local todavía no existe, el script usa `launcher.bat --setup-only` para prepararlo sin abrir la aplicación y luego continúa con la actualización.
 
 ## Requisitos
 
 - Windows 10 u 11.
-- Conexión a Internet para la instalación inicial y las descargas.
-- Python 3.11 o superior; si no está disponible, `launcher.bat` intenta instalar Python automáticamente.
-
-## Calidad de audio
-
-Convertir AAC, Opus o MP3 a WAV evita introducir una nueva compresión con pérdida durante la conversión, pero **no recupera información que ya haya sido eliminada por la compresión de SoundCloud**. WAV de 24 bits no transforma una fuente comprimida en un máster real de 24 bits.
-
-La aplicación solicita a `yt-dlp` el mejor audio disponible y convierte después el archivo recibido a WAV PCM.
+- Conexión a Internet durante la instalación inicial y las descargas.
+- Python 3.11 o superior; `launcher.bat` intenta instalar Python 3.14 automáticamente si hace falta.
 
 ## Archivos principales
 
-- `app.py`: aplicación e interfaz local base.
-- `privacy_patch.py`: capa v1.2 que fuerza WAV sin metadatos y nombres de salida limpios.
-- `launcher.bat`: instalación/preparación automática y arranque de la capa v1.2.
+- `app.py`: entrada segura de la aplicación.
+- `privacy_patch.py`: conversión, aislamiento temporal y verificación de limpieza.
+- `_core_app.py`: núcleo interno; no es el punto de entrada para el usuario.
+- `launcher.bat`: preparación automática y arranque.
 - `ACTUALIZAR.bat`: actualización manual de dependencias.
 - `requirements.txt`: dependencias de Python.
-- `LEEME_PRIMERO.txt`: instrucciones rápidas para Windows.
+- `LEEME_PRIMERO.txt`: instrucciones rápidas.
 
 ## Uso responsable
 
-Utiliza esta herramienta únicamente con contenido propio, con autorización del titular o cuando la legislación aplicable permita la descarga. El programa no está diseñado para evadir DRM, cuentas privadas ni controles de acceso.
+Utiliza esta herramienta únicamente con contenido propio, con autorización del titular o cuando la legislación aplicable permita la descarga. No está diseñada para evadir DRM, cuentas privadas ni controles de acceso.
