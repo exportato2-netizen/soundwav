@@ -1,56 +1,55 @@
-SOUNDWAV - VERSION 1.3
+SOUNDWAV - VERSION 1.4
 ======================
+
+DESCARGA
+--------
+GitHub:
+https://github.com/exportato2-netizen/soundwav
+
+ZIP directo:
+https://github.com/exportato2-netizen/soundwav/archive/refs/heads/main.zip
 
 USO RAPIDO
 ----------
-1. Descomprime todos los archivos en una carpeta.
+1. Descomprime todos los archivos.
 2. Haz doble clic en launcher.bat.
-3. Si falta Python compatible, el launcher intentara instalarlo automaticamente.
-4. Se abrira la interfaz en el navegador.
+3. Se abre una ventana dedicada de Soundwav.
+4. Si ya hay una instancia abierta, no se crea otra ventana.
 5. Pega una URL publica de SoundCloud y pulsa Descargar.
 
 SALIDA
 ------
-Los WAV finales quedan en:
 %USERPROFILE%\Music\WAV_Descargas
 
-El historial y registro interno quedan en:
+Estado interno, historial y temporales:
 %LOCALAPPDATA%\soundwav
 
-LIMPIEZA DE METADATOS
----------------------
-La version 1.3 obliga a que app.py cargue la capa de limpieza segura.
+VERSION 1.4
+-----------
+- Una sola instancia/ventana.
+- Cerrar la ventana cierra el servidor local.
+- Comprueba historial y WAV limpio ya existente antes de descargar de nuevo.
+- Progreso, velocidad y tiempo restante formateados sin caracteres de consola.
+- Hasta 8 fragmentos simultaneos para HLS/DASH.
+- Mejor fuente disponible mediante yt-dlp.
+- WAV final reconstruido y verificado con solo los chunks RIFF fmt y data.
+- Sin ID de SoundCloud en el nombre final.
+- Intenta eliminar atributos extendidos y Zone.Identifier.
 
-El archivo fuente se descarga primero a una carpeta temporal interna. FFmpeg lo
-convierte a PCM y luego la aplicacion reconstruye el WAV final conservando solo:
-- fmt
-- data
+LIMPIEZA
+--------
+El WAV final no conserva tags heredados, LIST/INFO, BEXT, iXML, caratulas,
+capitulos, URL, comentarios, licencia/copyright textual, IDs del extractor ni
+identificadores del software de conversion.
 
-Por tanto, el WAV final no conserva tags heredados, LIST/INFO, BEXT, iXML,
-caratulas, capitulos, URL, comentarios, IDs del extractor ni identificadores del
-software de conversion.
-
-El nombre final tampoco incluye el ID de SoundCloud. Ejemplo:
-001 - Nombre de la pista.wav
-
-IMPORTANTE
-----------
-La limpieza se refiere a metadatos y estructura del archivo. No puede quitar
-informacion que forme parte del propio audio audible sin modificar ese audio.
+Esta limpieza no cambia los derechos legales de una obra y no puede garantizar
+la eliminacion de una marca incorporada en el propio audio sin modificarlo.
 
 ACTUALIZAR
 ----------
-Ejecuta ACTUALIZAR.bat. Si todavia no existe el entorno .venv, el actualizador
-lo prepara automaticamente con launcher.bat --setup-only y luego continua.
-
-REQUISITOS
-----------
-- Windows 10 u 11
-- Conexion a Internet
-- Python 3.11 o superior; el launcher intenta instalar Python 3.14 si hace falta
+Ejecuta ACTUALIZAR.bat.
 
 USO RESPONSABLE
 ---------------
 Utilizalo solo con contenido propio, con permiso del titular o cuando la
-legislacion aplicable permita la descarga. No evade cuentas privadas, DRM ni
-controles de acceso.
+legislacion aplicable permita la descarga.
