@@ -9,17 +9,23 @@ import secrets
 from urllib.parse import urlparse
 
 API_TOKEN = secrets.token_urlsafe(32)
+_ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 
 
 def apply_hardening(app: object) -> None:
-    """Exige un token aleatorio en todos los endpoints /api/.
+    """Protege la interfaz local contra llamadas externas y DNS rebinding.
 
     El token solo se inserta en la página servida por la propia aplicación y no
-    se escribe en logs ni archivos. Esto bloquea POST ciegos desde otras páginas.
+    se escribe en logs ni archivos.
     """
     handler = app.RequestHandler
     original_get = handler.do_GET
     original_post = handler.do_POST
+
+    def local_host(self: object) -> bool:
+        raw_host = self.headers.get("Host", "")
+        host = raw_host.split(":", 1)[0].lower().rstrip(".")
+        return host in _ALLOWED_HOSTS
 
     def authorized(self: object) -> bool:
         supplied = self.headers.get("X-Soundwav-Token", "")
@@ -29,6 +35,9 @@ def apply_hardening(app: object) -> None:
         self.send_json({"error": "No autorizado"}, app.HTTPStatus.FORBIDDEN)
 
     def protected_get(self: object) -> None:
+        if not local_host(self):
+            reject(self)
+            return
         path = urlparse(self.path).path
         if path.startswith("/api/") and not authorized(self):
             reject(self)
@@ -36,6 +45,9 @@ def apply_hardening(app: object) -> None:
         original_get(self)
 
     def protected_post(self: object) -> None:
+        if not local_host(self):
+            reject(self)
+            return
         path = urlparse(self.path).path
         if path.startswith("/api/") and not authorized(self):
             reject(self)
