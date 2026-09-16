@@ -15,13 +15,11 @@ if not exist "requirements.txt" (
     exit /b 1
 )
 
-if not exist ".venv\Scripts\python.exe" (
-    echo No existe el entorno local. Preparandolo primero...
-    echo.
-    call launcher.bat --setup-only
-    if errorlevel 1 goto :error
-)
+echo Comprobando y reparando el entorno local...
+call launcher.bat --setup-only
+if errorlevel 1 goto :error
 
+echo.
 echo Actualizando pip, yt-dlp e ImageIO-FFmpeg...
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip
 if errorlevel 1 goto :error
