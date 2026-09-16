@@ -4,7 +4,7 @@ Herramienta local para Windows que descarga playlists o pistas públicas de Soun
 
 ## Versión 1.3
 
-La salida final ya no depende de ejecutar manualmente un parche externo. `app.py` es ahora la entrada segura y carga el núcleo interno con la capa de limpieza obligatoria.
+La salida final ya no depende de ejecutar manualmente un parche externo. `app.py` es la entrada segura y carga el núcleo interno con la capa de limpieza obligatoria. Incluso `_core_app.py` actúa únicamente como cargador protegido: si se ejecuta directamente, redirige a la entrada segura.
 
 Cada pista se procesa así:
 
@@ -42,21 +42,23 @@ El historial de descargas y el registro de actividad son datos internos de la ap
 
 ## Actualizar componentes
 
-Ejecuta `ACTUALIZAR.bat`. Si el entorno local todavía no existe, el script usa `launcher.bat --setup-only` para prepararlo sin abrir la aplicación y luego continúa con la actualización.
+Ejecuta `ACTUALIZAR.bat`. El script siempre llama primero a `launcher.bat --setup-only`, por lo que también repara un entorno `.venv` existente que haya quedado dañado o ligado a un Python incompatible, y después actualiza las dependencias sin abrir la aplicación.
 
 ## Requisitos
 
 - Windows 10 u 11.
 - Conexión a Internet durante la instalación inicial y las descargas.
 - Python 3.11 o superior; `launcher.bat` intenta instalar Python 3.14 automáticamente si hace falta.
+- El instalador de respaldo contempla Windows x86, x64 y ARM64.
 
 ## Archivos principales
 
 - `app.py`: entrada segura de la aplicación.
 - `privacy_patch.py`: conversión, aislamiento temporal y verificación de limpieza.
-- `_core_app.py`: núcleo interno; no es el punto de entrada para el usuario.
+- `_core_app.py`: cargador interno protegido.
+- `_core_app.src`: código del núcleo cargado internamente; no es el punto de entrada de uso normal.
 - `launcher.bat`: preparación automática y arranque.
-- `ACTUALIZAR.bat`: actualización manual de dependencias.
+- `ACTUALIZAR.bat`: reparación del entorno y actualización manual de dependencias.
 - `requirements.txt`: dependencias de Python.
 - `LEEME_PRIMERO.txt`: instrucciones rápidas.
 
